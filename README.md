@@ -118,6 +118,8 @@ x86_64-w64-mingw32-gcc -shared -o opengl32.dll gl_shim.c opengl32.def \
 x86_64-w64-mingw32-gcc -shared -o glfw3.dll glfw_shim.c glfw3.def \
   -Wall -Wl,--enable-stdcall-fixup -static-libgcc
 ```
+----------
+In the case of OpenSpace, no GLFW dll is needed as GLFW is statically linked.
 
 ## Caveats
 
