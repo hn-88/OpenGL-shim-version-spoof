@@ -10,8 +10,22 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+
+/* Include gl.h for types only — then undefine the dllimport-decorated
+   prototypes for the functions we are re-implementing, otherwise MinGW
+   complains about the redeclaration losing the dllimport attribute. */
 #include <GL/gl.h>
+#undef glGetString
+#undef glGetStringi
+#undef glGetIntegerv
+#undef wglGetProcAddress
+
 #include <string.h>
+
+/* GL_SHADING_LANGUAGE_VERSION is GL 2.0 and not in MinGW's older gl.h */
+#ifndef GL_SHADING_LANGUAGE_VERSION
+#define GL_SHADING_LANGUAGE_VERSION 0x8B8C
+#endif
 
 /* ------------------------------------------------------------------ */
 /* Real function pointers                                               */
