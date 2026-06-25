@@ -63,3 +63,64 @@ it should now report `4.6.0`.
 
 Delete the `opengl32.dll` from the OpenSpace folder. Windows will fall back
 to the system one automatically.
+
+---------------------------------
+
+Later, had to create a shim for glfw also, since that prevented the OpenGL context from being created.
+
+Claude's readme below.
+
+# OpenSpace VMware shims
+
+Two proxy DLLs that let OpenSpace 0.22.x run under VMware Fusion on macOS,
+where the OpenGL driver caps out at 4.1.
+
+## The two problems and their fixes
+
+| Problem | DLL | What it does |
+|---|---|---|
+| SGCT requests a 4.6 context via `glfwWindowHint`, driver refuses | `glfw3.dll` | Intercepts `glfwWindowHint`, clamps requested version to 4.1 |
+| OpenSpace checks `glGetString(GL_VERSION)` and bails if < 4.6 | `opengl32.dll` | Intercepts version queries, reports 4.6 |
+
+## Install
+
+1. Download both DLLs from the Actions artifact (`openspace-vmware-shims`)
+2. Go to your OpenSpace `bin\` folder (where `openspace.exe` lives)
+3. Rename the existing `glfw3.dll` → `glfw3_real.dll`
+4. Copy `C:\Windows\System32\opengl32.dll` → `opengl32_real.dll` in same folder
+5. Drop both shim DLLs (`opengl32.dll` and `glfw3.dll`) into the same folder
+
+The folder should now contain:
+```
+openspace.exe
+opengl32.dll        ← shim (version spoof)
+opengl32_real.dll   ← real system OpenGL
+glfw3.dll           ← shim (context version clamp)
+glfw3_real.dll      ← real GLFW from original install
+...
+```
+
+## Build locally (Linux)
+
+```bash
+sudo apt install gcc-mingw-w64-x86-64
+
+# opengl32.dll
+x86_64-w64-mingw32-dlltool \
+  --output-lib libopengl32_real.a \
+  --dllname opengl32_real.dll \
+  --def opengl32.def \
+  --as-flags "--64"
+x86_64-w64-mingw32-gcc -shared -o opengl32.dll gl_shim.c opengl32.def \
+  -L. -lopengl32_real -Wall -Wl,--enable-stdcall-fixup -static-libgcc
+
+# glfw3.dll
+x86_64-w64-mingw32-gcc -shared -o glfw3.dll glfw_shim.c glfw3.def \
+  -Wall -Wl,--enable-stdcall-fixup -static-libgcc
+```
+
+## Caveats
+
+Any GL 4.2–4.6 features OpenSpace actually calls will silently fail or produce
+rendering artefacts, since the underlying driver only supports 4.1. This is
+accepted behaviour for this use case.
