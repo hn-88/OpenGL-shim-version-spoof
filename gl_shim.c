@@ -146,13 +146,27 @@ HGLRC WINAPI hooked_wglCreateContextAttribsARB(HDC hdc, HGLRC hShareContext,
 
             if (attribList[i] == WGL_CONTEXT_MAJOR_VERSION_ARB && attribList[i+1] > 4)
                 patched[i+1] = 4;
-            if (attribList[i] == WGL_CONTEXT_MINOR_VERSION_ARB && attribList[i+1] > 1)
-                patched[i+1] = 1;
+            if (attribList[i] == WGL_CONTEXT_MINOR_VERSION_ARB && attribList[i+1] > 3)
+                patched[i+1] = 3;
         }
     }
     patched[i] = 0; /* terminator */
 
-    return real_wglCreateContextAttribsARB(hdc, hShareContext, patched);
+    /* First try with our clamped version. If the driver still refuses,
+       retry stepping the minor version down to 0. */
+    HGLRC ctx = real_wglCreateContextAttribsARB(hdc, hShareContext, patched);
+    if (ctx) return ctx;
+
+    /* Retry loop: step minor down from 3 to 0 */
+    for (int minor = 2; minor >= 0; minor--) {
+        for (int j = 0; patched[j] != 0; j += 2) {
+            if (patched[j] == WGL_CONTEXT_MINOR_VERSION_ARB)
+                patched[j+1] = minor;
+        }
+        ctx = real_wglCreateContextAttribsARB(hdc, hShareContext, patched);
+        if (ctx) return ctx;
+    }
+    return NULL;
 }
 
 /* ------------------------------------------------------------------ */
@@ -163,11 +177,21 @@ PROC WINAPI wglGetProcAddress(LPCSTR name)
 {
     PROC real = real_wglGetProcAddress(name);
 
-    if (name && strcmp(name, "wglCreateContextAttribsARB") == 0 && real) {
-        /* Stash the real pointer so our hook can call it */
+    if (!name) return real;
+
+    /* Intercept wglCreateContextAttribsARB to clamp requested GL version */
+    if (strcmp(name, "wglCreateContextAttribsARB") == 0 && real) {
         real_wglCreateContextAttribsARB = (PFN_wglCreateContextAttribsARB)real;
         return (PROC)hooked_wglCreateContextAttribsARB;
     }
+
+    /* GLFW loads glGetString and glGetIntegerv via wglGetProcAddress rather
+       than using the DLL export — so we must intercept here too, otherwise
+       GLFW reads the real version string ("4.3.0..."), parses it as 4.3,
+       and fails its post-creation version check against the requested 4.6. */
+    if (strcmp(name, "glGetString") == 0)    return (PROC)glGetString;
+    if (strcmp(name, "glGetStringi") == 0)   return (PROC)glGetStringi;
+    if (strcmp(name, "glGetIntegerv") == 0)  return (PROC)glGetIntegerv;
 
     return real;
 }
