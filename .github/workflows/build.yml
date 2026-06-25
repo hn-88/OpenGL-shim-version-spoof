@@ -1,7 +1,7 @@
-name: Build opengl32.dll shim
+name: Build OpenGL + GLFW shims
 
-on: 
-  workflow_dispatch
+on:  
+  workflow_dispatch:
 
 jobs:
   build:
@@ -15,19 +15,14 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y gcc-mingw-w64-x86-64
 
-      - name: Build opengl32.dll
+      - name: Build opengl32.dll (version spoof)
         run: |
-          # Step 1: build a thin import lib that points at the *real* opengl32.dll
-          # We rename it opengl32_real so the .def forwards resolve correctly.
-          # The real DLL on the target machine is still called opengl32.dll —
-          # the "real" name here is just a linker alias used at build time.
           x86_64-w64-mingw32-dlltool \
             --output-lib libopengl32_real.a \
-            --dllname opengl32.dll \
+            --dllname opengl32_real.dll \
             --def opengl32.def \
             --as-flags "--64"
 
-          # Step 2: compile the shim, linking against our forwarding import lib
           x86_64-w64-mingw32-gcc \
             -shared \
             -o opengl32.dll \
@@ -39,8 +34,21 @@ jobs:
             -Wl,--enable-stdcall-fixup \
             -static-libgcc
 
-      - name: Upload artifact
+      - name: Build glfw3.dll (context version clamp)
+        run: |
+          x86_64-w64-mingw32-gcc \
+            -shared \
+            -o glfw3.dll \
+            glfw_shim.c \
+            glfw3.def \
+            -Wall \
+            -Wl,--enable-stdcall-fixup \
+            -static-libgcc
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: opengl32-shim
-          path: opengl32.dll
+          name: openspace-vmware-shims
+          path: |
+            opengl32.dll
+            glfw3.dll
