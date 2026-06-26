@@ -63,7 +63,7 @@ BOOL WINAPI DllMain(HINSTANCE hInst, DWORD reason, LPVOID reserved)
         if (!real_gl) return FALSE;
 
         real_glGetString       = (PFN_glGetString)      GetProcAddress(real_gl, "glGetString");
-        real_glGetStringi      = (PFN_glGetStringi)     GetProcAddress(real_gl, "glGetStringi");
+        /* glGetStringi is GL 3.0+, not a static export - loaded later via wglGetProcAddress */
         real_glGetIntegerv     = (PFN_glGetIntegerv)    GetProcAddress(real_gl, "glGetIntegerv");
         real_wglGetProcAddress = (PFN_wglGetProcAddress)GetProcAddress(real_gl, "wglGetProcAddress");
 
@@ -87,6 +87,10 @@ BOOL WINAPI DllMain(HINSTANCE hInst, DWORD reason, LPVOID reserved)
 #define GL_MAJOR_VERSION 0x821B
 #define GL_MINOR_VERSION 0x821C
 
+#ifndef GL_EXTENSIONS
+#define GL_EXTENSIONS 0x1F03
+#endif
+
 const GLubyte *WINAPI glGetString(GLenum name)
 {
     switch (name) {
@@ -94,6 +98,11 @@ const GLubyte *WINAPI glGetString(GLenum name)
             return (const GLubyte *)"4.6.0 Compatibility Profile";
         case GL_SHADING_LANGUAGE_VERSION:
             return (const GLubyte *)"4.60";
+        case GL_EXTENSIONS:
+            /* Core profile (GL 3.0+) returns NULL for GL_EXTENSIONS; callers
+               must use glGetStringi instead. Return empty string rather than
+               NULL so GLFW does not treat it as a platform error. */
+            return (const GLubyte *)"";
         default:
             return real_glGetString(name);
     }
@@ -190,7 +199,12 @@ PROC WINAPI wglGetProcAddress(LPCSTR name)
        GLFW reads the real version string ("4.3.0..."), parses it as 4.3,
        and fails its post-creation version check against the requested 4.6. */
     if (strcmp(name, "glGetString") == 0)    return (PROC)glGetString;
-    if (strcmp(name, "glGetStringi") == 0)   return (PROC)glGetStringi;
+    if (strcmp(name, "glGetStringi") == 0) {
+        /* Stash the real pointer now that we have a live context */
+        if (!real_glGetStringi && real)
+            real_glGetStringi = (PFN_glGetStringi)real;
+        return (PROC)glGetStringi;
+    }
     if (strcmp(name, "glGetIntegerv") == 0)  return (PROC)glGetIntegerv;
 
     return real;
